@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSnipper</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Segoe UI", sans-serif;
+      font-size: 13px;
+      color: #1f1f1f;
+      background: #fafafa;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      background: #217346;
+      color: white;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .header svg { flex-shrink: 0; }
+    .header-title { font-size: 15px; font-weight: 600; }
+    .header-sub { font-size: 11px; opacity: 0.75; margin-top: 1px; }
+
+    /* Main area */
+    .main { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+
+    /* API key section */
+    .section { background: white; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; }
+    .section-title { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+    label { font-size: 12px; color: #444; display: block; margin-bottom: 4px; }
+    input[type="password"], input[type="text"] {
+      width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px;
+      font-size: 12px; font-family: inherit; outline: none;
+    }
+    input:focus { border-color: #217346; }
+
+    /* Upload area */
+    .drop-zone {
+      border: 2px dashed #c0c0c0; border-radius: 6px; padding: 20px 14px;
+      text-align: center; cursor: pointer; transition: all 0.15s;
+      background: white;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: #217346; background: #f0f8f4; }
+    .drop-zone svg { margin-bottom: 8px; opacity: 0.5; }
+    .drop-zone p { font-size: 12px; color: #666; line-height: 1.5; }
+    .drop-zone span { color: #217346; font-weight: 600; }
+    #file-input { display: none; }
+
+    /* Preview */
+    #preview-wrap { display: none; position: relative; }
+    #preview-wrap img { width: 100%; border-radius: 4px; border: 1px solid #e0e0e0; display: block; }
+    .remove-btn {
+      position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.55);
+      color: white; border: none; border-radius: 50%; width: 22px; height: 22px;
+      font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .file-name { font-size: 11px; color: #666; margin-top: 5px; text-align: center; }
+
+    /* Prompt */
+    textarea {
+      width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 3px;
+      font-family: inherit; font-size: 12px; resize: vertical; min-height: 72px; outline: none;
+      line-height: 1.5;
+    }
+    textarea:focus { border-color: #217346; }
+
+    /* Options */
+    .options-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .option-chip {
+      padding: 4px 10px; border: 1px solid #ccc; border-radius: 12px; font-size: 11px;
+      cursor: pointer; background: white; color: #444; transition: all 0.1s;
+      user-select: none;
+    }
+    .option-chip.active { background: #217346; border-color: #217346; color: white; }
+
+    /* Extract button */
+    .extract-btn {
+      width: 100%; padding: 9px; background: #217346; color: white;
+      border: none; border-radius: 4px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s; font-family: inherit;
+    }
+    .extract-btn:hover:not(:disabled) { background: #185c38; }
+    .extract-btn:disabled { background: #a0a0a0; cursor: not-allowed; }
+
+    /* Status */
+    #status {
+      font-size: 12px; padding: 8px 10px; border-radius: 4px;
+      display: none; line-height: 1.5;
+    }
+    #status.info { background: #e8f4fd; color: #0a6090; border: 1px solid #b8dcf5; }
+    #status.success { background: #edf7ed; color: #1a6e2e; border: 1px solid #b5debb; }
+    #status.error { background: #fdecea; color: #b71c1c; border: 1px solid #f5c6c6; }
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor;
+      border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite;
+      margin-right: 5px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    #results-section { display: none; }
+    .result-table-wrap { overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { background: #f2f2f2; padding: 5px 8px; text-align: left; font-weight: 600;
+      border-bottom: 1px solid #ddd; white-space: nowrap; }
+    td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: top; word-break: break-word; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f7fff8; }
+
+    .action-row { display: flex; gap: 8px; margin-top: 8px; }
+    .action-btn {
+      flex: 1; padding: 7px; border: 1px solid #217346; border-radius: 3px;
+      font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.1s; background: white; color: #217346;
+    }
+    .action-btn.primary { background: #217346; color: white; }
+    .action-btn:hover { opacity: 0.85; }
+
+    .raw-text { font-size: 11px; background: #f8f8f8; border: 1px solid #e0e0e0;
+      border-radius: 4px; padding: 10px; max-height: 180px; overflow-y: auto;
+      white-space: pre-wrap; line-height: 1.6; color: #333; }
+
+    /* Footer */
+    .footer { padding: 8px 14px; border-top: 1px solid #e8e8e8; text-align: center;
+      font-size: 10px; color: #aaa; flex-shrink: 0; background: white; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+    <rect width="22" height="22" rx="4" fill="rgba(255,255,255,0.2)"/>
+    <path d="M5 8h12M5 11h8M5 14h10" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M15 13l2.5 2.5M17.5 15.5l-1.5 1.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <div class="header-title">DataSnipper</div>
+    <div class="header-sub">AI-powered PDF & image extraction</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- API Key -->
+  <div class="section">
+    <div class="section-title">Anthropic API Key</div>
+    <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off" />
+  </div>
+
+  <!-- Upload -->
+  <div class="section">
+    <div class="section-title">Document</div>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <svg width="32" height="32" fill="none" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#217346" opacity="0.08"/><path d="M16 10v10M11 15l5-5 5 5M9 22h14" stroke="#217346" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <p><span>Click to upload</span> or drag & drop<br/>PDF, PNG, JPG, WEBP (max 10MB)</p>
+    </div>
+    <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="preview" />
+      <button class="remove-btn" onclick="clearFile()">×</button>
+      <div class="file-name" id="file-name"></div>
+    </div>
+  </div>
+
+  <!-- Extraction mode -->
+  <div class="section">
+    <div class="section-title">Extract as</div>
+    <div class="options-row" id="mode-chips">
+      <div class="option-chip active" data-mode="table">Table</div>
+      <div class="option-chip" data-mode="keyvalue">Key-Value</div>
+      <div class="option-chip" data-mode="list">List</div>
+      <div class="option-chip" data-mode="raw">Raw text</div>
+    </div>
+  </div>
+
+  <!-- Custom prompt -->
+  <div class="section">
+    <div class="section-title">Instructions (optional)</div>
+    <textarea id="custom-prompt" placeholder="e.g. Extract only the invoice line items with quantities and prices"></textarea>
+  </div>
+
+  <!-- Extract -->
+  <button class="extract-btn" id="extract-btn" onclick="extract()">Extract to Sheet ↗</button>
+
+  <!-- Status -->
+  <div id="status"></div>
+
+  <!-- Results preview -->
+  <div id="results-section" class="section">
+    <div class="section-title">Preview</div>
+    <div id="results-content"></div>
+    <div class="action-row">
+      <button class="action-btn primary" id="insert-btn" onclick="insertToSheet()">Insert into Excel</button>
+      <button class="action-btn" onclick="copyToClipboard()">Copy</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">Powered by Claude claude-sonnet-4-20250514 · Your key stays local</div>
+
+<script>
+  let currentFile = null;
+  let currentFileType = null;
+  let extractedData = null;
+  let activeMode = 'table';
+
+  Office.onReady(() => {
+    const saved = localStorage.getItem('ds_api_key');
+    if (saved) document.getElementById('api-key').value = saved;
+  });
+
+  // Mode chips
+  document.querySelectorAll('.option-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeMode = chip.dataset.mode;
+    });
+  });
+
+  // Drag & drop
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  document.getElementById('file-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    if (!allowed.includes(file.type)) return showStatus('Unsupported file type.', 'error');
+    if (file.size > 10 * 1024 * 1024) return showStatus('File too large (max 10MB).', 'error');
+    currentFile = file;
+    currentFileType = file.type;
+    document.getElementById('file-name').textContent = file.name;
+    document.getElementById('drop-zone').style.display = 'none';
+    const wrap = document.getElementById('preview-wrap');
+    wrap.style.display = 'block';
+    if (file.type !== 'application/pdf') {
+      const reader = new FileReader();
+      reader.onload = e => document.getElementById('preview-img').src = e.target.result;
+      reader.readAsDataURL(file);
+    } else {
+      document.getElementById('preview-img').src = '';
+      document.getElementById('preview-img').style.display = 'none';
+    }
+    hideStatus();
+  }
+
+  function clearFile() {
+    currentFile = null; currentFileType = null;
+    document.getElementById('drop-zone').style.display = '';
+    document.getElementById('preview-wrap').style.display = 'none';
+    document.getElementById('preview-img').style.display = '';
+    document.getElementById('preview-img').src = '';
+    document.getElementById('file-input').value = '';
+    document.getElementById('results-section').style.display = 'none';
+    hideStatus();
+  }
+
+  async function extract() {
+    const apiKey = document.getElementById('api-key').value.trim();
+    if (!apiKey) return showStatus('Please enter your Anthropic API key.', 'error');
+    if (!currentFile) return showStatus('Please upload a PDF or image.', 'error');
+    localStorage.setItem('ds_api_key', apiKey);
+
+    const btn = document.getElementById('extract-btn');
+    btn.disabled = true;
+    document.getElementById('results-section').style.display = 'none';
+    showStatus('<span class="spinner"></span> Reading document with Claude Vision…', 'info');
+
+    try {
+      const base64 = await fileToBase64(currentFile);
+      const mediaType = currentFileType;
+
+      const modeInstructions = {
+        table: `Extract all tabular data from this document. Return ONLY valid JSON in this exact format, no markdown, no explanation:
+{"headers": ["col1","col2",...], "rows": [["val","val",...], ...]}
+If multiple tables exist, merge them or pick the most prominent one.`,
+        keyvalue: `Extract all key-value pairs (labels and their values) from this document. Return ONLY valid JSON:
+{"pairs": [{"key": "Label", "value": "Value"}, ...]}`,
+        list: `Extract all list items, bullet points, or enumerated data. Return ONLY valid JSON:
+{"items": ["item1", "item2", ...]}`,
+        raw: `Transcribe ALL text content from this document exactly as it appears. Return only the raw text, no JSON, no explanation.`
+      };
+
+      const customPrompt = document.getElementById('custom-prompt').value.trim();
+      const systemPrompt = customPrompt
+        ? `${modeInstructions[activeMode]}\n\nAdditional instruction: ${customPrompt}`
+        : modeInstructions[activeMode];
+
+      const contentBlock = mediaType === 'application/pdf'
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+        : { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } };
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          messages: [{
+            role: 'user',
+            content: [contentBlock, { type: 'text', text: systemPrompt }]
+          }]
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || `API error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const text = data.content.map(b => b.text || '').join('').trim();
+      extractedData = { mode: activeMode, raw: text };
+
+      renderPreview(text, activeMode);
+      showStatus('Extraction complete. Preview below — click "Insert into Excel" when ready.', 'success');
+    } catch (err) {
+      showStatus('Error: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderPreview(text, mode) {
+    const sec = document.getElementById('results-section');
+    const content = document.getElementById('results-content');
+    sec.style.display = 'block';
+
+    if (mode === 'raw') {
+      content.innerHTML = `<div class="raw-text">${escHtml(text)}</div>`;
+      return;
+    }
+
+    try {
+      const clean = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+
+      if (mode === 'table' && parsed.headers && parsed.rows) {
+        let html = '<div class="result-table-wrap"><table><thead><tr>';
+        parsed.headers.forEach(h => html += `<th>${escHtml(h)}</th>`);
+        html += '</tr></thead><tbody>';
+        parsed.rows.forEach(row => {
+          html += '<tr>';
+          row.forEach(cell => html += `<td>${escHtml(String(cell ?? ''))}</td>`);
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        content.innerHTML = html;
+      } else if (mode === 'keyvalue' && parsed.pairs) {
+        let html = '<div class="result-table-wrap"><table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>';
+        parsed.pairs.forEach(p => html += `<tr><td>${escHtml(p.key)}</td><td>${escHtml(String(p.value ?? ''))}</td></tr>`);
+        html += '</tbody></table></div>';
+        content.innerHTML = html;
+      } else if (mode === 'list' && parsed.items) {
+        let html = '<div class="result-table-wrap"><table><thead><tr><th>Item</th></tr></thead><tbody>';
+        parsed.items.forEach(item => html += `<tr><td>${escHtml(String(item))}</td></tr>`);
+        html += '</tbody></table></div>';
+        content.innerHTML = html;
+      } else {
+        content.innerHTML = `<div class="raw-text">${escHtml(text)}</div>`;
+      }
+    } catch {
+      content.innerHTML = `<div class="raw-text">${escHtml(text)}</div>`;
+    }
+  }
+
+  async function insertToSheet() {
+    if (!extractedData) return;
+    const { mode, raw } = extractedData;
+    try {
+      await Excel.run(async ctx => {
+        const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+        const range = ctx.workbook.getSelectedRange();
+        range.load('rowIndex,columnIndex');
+        await ctx.sync();
+
+        const startRow = range.rowIndex;
+        const startCol = range.columnIndex;
+
+        if (mode === 'raw') {
+          const lines = raw.split('\n');
+          lines.forEach((line, i) => {
+            sheet.getCell(startRow + i, startCol).values = [[line]];
+          });
+        } else {
+          try {
+            const clean = raw.replace(/```json|```/g, '').trim();
+            const parsed = JSON.parse(clean);
+            let grid = [];
+
+            if (mode === 'table' && parsed.headers) {
+              grid.push(parsed.headers);
+              parsed.rows.forEach(r => grid.push(r.map(c => c ?? '')));
+            } else if (mode === 'keyvalue' && parsed.pairs) {
+              grid.push(['Key', 'Value']);
+              parsed.pairs.forEach(p => grid.push([p.key, p.value ?? '']));
+            } else if (mode === 'list' && parsed.items) {
+              parsed.items.forEach(item => grid.push([item]));
+            }
+
+            if (grid.length) {
+              const cols = Math.max(...grid.map(r => r.length));
+              const rows = grid.map(r => { while (r.length < cols) r.push(''); return r; });
+              const r = sheet.getRangeByIndexes(startRow, startCol, rows.length, cols);
+              r.values = rows;
+
+              // Style header row
+              if (mode === 'table' || mode === 'keyvalue') {
+                const header = sheet.getRangeByIndexes(startRow, startCol, 1, cols);
+                header.format.font.bold = true;
+                header.format.fill.color = '#217346';
+                header.format.font.color = '#FFFFFF';
+              }
+            }
+          } catch {
+            sheet.getCell(startRow, startCol).values = [[raw]];
+          }
+        }
+        await ctx.sync();
+        showStatus('Data inserted into your sheet!', 'success');
+      });
+    } catch (err) {
+      showStatus('Insert failed: ' + err.message, 'error');
+    }
+  }
+
+  function copyToClipboard() {
+    if (!extractedData) return;
+    navigator.clipboard.writeText(extractedData.raw).then(() => {
+      showStatus('Copied to clipboard.', 'success');
+    });
+  }
+
+  function fileToBase64(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+
+  function showStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.innerHTML = msg;
+    el.className = type;
+    el.style.display = 'block';
+  }
+  function hideStatus() {
+    document.getElementById('status').style.display = 'none';
+  }
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
